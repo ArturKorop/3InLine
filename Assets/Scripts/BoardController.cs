@@ -59,8 +59,21 @@ public class BoardController : MonoBehaviour
         }
         else
         {
-            Destroy(target.Object);
-            Destroy(this.currentPressed.Object);
+            var targetNeighbours = this.GetAllSameColorNeighbours(target);
+            var currentPressedNeighbours = this.GetAllSameColorNeighbours(this.currentPressed);
+            var targetNeighboursCount = targetNeighbours.Count();
+            var tnarray = targetNeighbours.ToArray();
+            for (int i = 0; i < targetNeighboursCount; i++)
+            {
+                Destroy(tnarray[i].Object);
+            }
+
+            var pressedNeighboursCount = currentPressedNeighbours.Count();
+            var pnarray = currentPressedNeighbours.ToArray();
+            for (int i = 0; i < pressedNeighboursCount; i++)
+            {
+                Destroy(pnarray[i].Object);
+            }
         }
     }
 
@@ -83,5 +96,75 @@ public class BoardController : MonoBehaviour
     private float GetDistance(Point a, Point b)
     {
         return Mathf.Sqrt(Mathf.Abs(a.X - b.X) + Mathf.Abs(a.Y - b.Y));
+    }
+
+    private IEnumerable<GameObjectValue> GetAllSameColorNeighbours(GameObjectValue target)
+    {
+        var horizontalResult = new List<GameObjectValue>();
+
+        for (int i = 0; i < target.Position.X; i++)
+        {
+            var temp = this.gemsField[i, target.Position.Y];
+            if (temp.Value != target.Value)
+            {
+                break;
+            }
+
+            horizontalResult.Add(temp);
+        }
+
+        for (int i = target.Position.X + 1; i < this.Columns; i++)
+        {
+            var temp = this.gemsField[i, target.Position.Y];
+            if (temp.Value != target.Value)
+            {
+                break;
+            }
+
+            horizontalResult.Add(temp);
+        }
+
+        var verticalResult = new List<GameObjectValue>();
+
+        for (int i = target.Position.Y + 1; i < this.Rows; i++)
+        {
+            var temp = this.gemsField[target.Position.X, i];
+            if (temp.Value != target.Value)
+            {
+                break;
+            }
+
+            verticalResult.Add(temp);
+        }
+
+        for (int i = 0; i < target.Position.Y; i++)
+        {
+            var temp = this.gemsField[target.Position.X, i];
+            if (temp.Value != target.Value)
+            {
+                break;
+            }
+
+            verticalResult.Add(temp);
+        }
+
+        if (horizontalResult.Count < 2)
+        {
+            horizontalResult.Clear();
+        }
+
+        if (verticalResult.Count < 2)
+        {
+            verticalResult.Clear();
+        }
+
+        horizontalResult.AddRange(verticalResult);
+        List<GameObjectValue> result = horizontalResult;
+        if (result.Any())
+        {
+            result.Add(target);
+        }
+
+        return result;
     }
 }
