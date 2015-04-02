@@ -13,11 +13,11 @@ public class BoardController : MonoBehaviour
     public int Rows = 8;
 
     private Transform boardHolder;
-    private BoardObjectValue[,] gemsField;
-    private BoardObjectValue previousPressed;
-    private BoardObjectValue currentPressed;
+    private BoardGem[,] gemsField;
+    private BoardGem previousPressed;
+    private BoardGem currentPressed;
     private List<int> GemIndexes;
-    private bool inProcess;
+    private bool canProcess;
 
     public void Awake()
     {
@@ -32,13 +32,14 @@ public class BoardController : MonoBehaviour
 
         DontDestroyOnLoad(gameObject);
 
-        this.gemsField = new BoardObjectValue[this.Columns, this.Rows];
+        this.gemsField = new BoardGem[this.Columns, this.Rows];
         this.GemIndexes = new List<int>();
         for (int i = 0; i < this.Gems.Count; i++)
         {
             this.GemIndexes.Add(i);
         }
 
+        this.canProcess = true;
         this.BoardSetup();
     }
 
@@ -49,11 +50,10 @@ public class BoardController : MonoBehaviour
             for (int j = 0; j < this.Rows; j++)
             {
                 var obj = this.gemsField[i,j];
-                if(gem == obj.Object)
+                if(gem == obj.GameObject)
                 {
                     this.previousPressed = this.currentPressed;
                     this.currentPressed = obj;
-                    this.inProcess = true;
 
                     break;
                 }
@@ -63,12 +63,13 @@ public class BoardController : MonoBehaviour
 
     public void FixedUpdate()
     {
-        if (this.inProcess)
+        if (this.canProcess)
         {
-            this.inProcess = false;
-            if (this.previousPressed == null || this.currentPressed.Value == previousPressed.Value || this.GetDistance(this.currentPressed.Position, previousPressed.Position) > 1)
+            this.canProcess = false;
+            if (this.previousPressed == null || this.currentPressed.Color == previousPressed.Color || this.GetDistance(this.currentPressed.Position, previousPressed.Position) > 1)
             {
                 this.previousPressed = null;
+                this.canProcess = true; 
             }
             else
             {
@@ -77,56 +78,51 @@ public class BoardController : MonoBehaviour
         }
     }
 
+    private bool CheckGemStatus(BoardGem gem)
+    {
+        var neighbours = this.GetAllSameColorNeighbours(gem).ToArray(); ;
+        var neighboursCount = neighbours.Count();
+        for (int i = 0; i < neighboursCount; i++)
+        {
+            var removingGem = neighbours[i];
+            this.gemsField[removingGem.Position.X, removingGem.Position.Y] = null;
+            Destroy(removingGem.GameObject);
+        }
+
+        return neighboursCount > 0;
+    }
+
     private IEnumerator ProcessGemsSwapping()
     {
-        this.SwapPosition(this.currentPressed, this.previousPressed);
+            this.SwapPosition(this.currentPressed, this.previousPressed);
 
-            yield return new WaitForSeconds(0.1f);
+            yield return new WaitForSeconds(0.2f);
 
-            var previousNeighbours = this.GetAllSameColorNeighbours(this.previousPressed);
-            var currentNeighbours = this.GetAllSameColorNeighbours(this.currentPressed);
-
-            var previousNeighboursCount = previousNeighbours.Count();
-            var pnarray = previousNeighbours.ToArray();
-            for (int i = 0; i < previousNeighboursCount; i++)
+            if (this.CheckGemStatus(this.currentPressed) | this.CheckGemStatus(this.previousPressed))
             {
-                var removingGem = pnarray[i];
-                this.gemsField[removingGem.Position.X, removingGem.Position.Y] = null;
-                Destroy(removingGem.Object);
-            }
-
-            var currentNeighboursCount = currentNeighbours.Count();
-            var cnarray = currentNeighbours.ToArray();
-            for (int i = 0; i < currentNeighboursCount; i++)
-            {
-                var removingGem = cnarray[i];
-                this.gemsField[removingGem.Position.X, removingGem.Position.Y] = null;
-                Destroy(removingGem.Object);
-            }
-
-            if (pnarray.Any() || cnarray.Any())
-            {
-                yield return this.UpdateBoard();
+                yield return StartCoroutine(this.ProcessUpdateBoard());
             }
             else
             {
                 SwapPosition(this.currentPressed, this.previousPressed);
-
-                yield return new WaitForSeconds(0.1f);
             }
 
-        yield return new WaitForSeconds(0.1f);
+        yield return new WaitForSeconds(0.2f);
+        this.previousPressed = null;
+        this.currentPressed = null;
+        this.canProcess = true;
     }
-    
 
-    private IEnumerator UpdateBoard()
+    private IEnumerator ProcessUpdateBoard()
     {
-        yield return this.MoveGemsToEmptySpaces();
-        yield return this.CreateNewGemsForEmptySpaces();
+        yield return StartCoroutine(this.MoveGemsToEmptySpaces());
+
+        yield return StartCoroutine(this.CreateNewGemsForEmptySpaces());
     }
 
     private IEnumerator MoveGemsToEmptySpaces()
     {
+        var movedGems = new List<BoardGem>();
         for (int i = 0; i < this.Columns; i++)
         {
             for (int j = 0; j < this.Rows; j++)
@@ -138,52 +134,73 @@ public class BoardController : MonoBehaviour
                     var nearestGem = this.FindNearestGemInColumns(point);
                     if(nearestGem != null)
                     {
+                        this.gemsField[nearestGem.Position.X, nearestGem.Position.Y] = null;
                         nearestGem.Position = point;
-                        nearestGem.Object.transform.position = new Vector3(point.X, point.Y, 0);
+                        nearestGem.GameObject.transform.position = new Vector3(point.X, point.Y, 0);
+                        this.gemsField[i, j] = nearestGem;
+                        movedGems.Add(nearestGem);
 
-                        yield return new WaitForEndOfFrame();
+                        yield return new WaitForSeconds(0.2f);
                     }
                 }
             }
+        }
+
+        var needMoveAnotherGems = false;
+        if(movedGems.Any())
+        {
+            foreach (var gem in movedGems)
+            {
+                if(this.CheckGemStatus(gem))
+                {
+                    needMoveAnotherGems = true;
+                }
+            }
+        }
+
+        if(needMoveAnotherGems)
+        {
+            yield return StartCoroutine(this.MoveGemsToEmptySpaces());
         }
     }
 
     private IEnumerator CreateNewGemsForEmptySpaces()
     {
-        yield return new WaitForSeconds(0.5f);
-    }
-
-    private void SwapPosition(BoardObjectValue a, BoardObjectValue b)
-    {
-        var aPosition = a.Position;
-        var bPosition = b.Position;
-        this.gemsField[aPosition.X, aPosition.Y] = b;
-        b.Position = aPosition;
-        this.gemsField[bPosition.X, bPosition.Y] = a;
-        a.Position = bPosition;
-
-        var tempPosition = b.Object.transform.position;
-        b.Object.transform.position = a.Object.transform.position;
-        a.Object.transform.position = tempPosition;
-    }
-
-    private BoardObjectValue FindNearestGemInColumns(Point position)
-    {
-        if(position.X == this.Rows - 1)
+        for (int i = 0; i < this.Columns; i++)
         {
-            return null;
-        }
-
-        for (int i = position.Y + 1; i < this.Rows; i++)
-        {
-            var currentGem = this.gemsField[position.X, i];
-            if(currentGem != null)
+            for (int j = 0; j < this.Rows; j++)
             {
-                return currentGem;
+                if (this.gemsField[i, j] != null)
+                {
+                    continue;
+                }
+
+                this.gemsField[i, j] = new BoardGem { Position = new Point { X = i, Y = j } };
+                var field = this.gemsField[i, j];
+                var indexes = this.GemIndexes.ToList();
+                GameObject instance = null;
+                while (instance == null)
+                {
+                    var index = Random.Range(0, indexes.Count);
+                    var value = indexes[index];
+                    field.Color = value;
+                    if (!this.GetAllSameColorNeighbours(field).Any())
+                    {
+                        instance = Instantiate(this.Gems[value], new Vector3(i, j, 0), Quaternion.identity) as GameObject;
+                        instance.transform.SetParent(this.boardHolder);
+                        field.GameObject = instance;
+
+                        yield return new WaitForSeconds(0.2f);
+                    }
+                    else
+                    {
+                        indexes.Remove(value);
+                    }
+                }
             }
         }
 
-        return null;
+        yield return new WaitForEndOfFrame();
     }
 
     private void BoardSetup()
@@ -194,7 +211,12 @@ public class BoardController : MonoBehaviour
         {
             for (int j = 0; j < this.Rows; j++)
             {
-                this.gemsField[i, j] = new BoardObjectValue { Position = new Point { X = i, Y = j } };
+                if(this.gemsField[i,j] != null)
+                {
+                    continue;
+                }
+
+                this.gemsField[i, j] = new BoardGem { Position = new Point { X = i, Y = j } };
                 var field = this.gemsField[i,j];
                 var indexes = this.GemIndexes.ToList();
                 GameObject instance = null;
@@ -202,14 +224,12 @@ public class BoardController : MonoBehaviour
                 {
                     var index = Random.Range(0, indexes.Count);
                     var value = indexes[index];
-                    field.Value = value;
+                    field.Color = value;
                     if (!this.GetAllSameColorNeighbours(field).Any())
                     {
                         instance = Instantiate(this.Gems[value], new Vector3(i, j, 0), Quaternion.identity) as GameObject;
                         instance.transform.SetParent(this.boardHolder);
-                        field.Object = instance;
-
-                        //yield return new WaitForSeconds(1);
+                        field.GameObject = instance;
                     }
                     else
                     {
@@ -225,14 +245,14 @@ public class BoardController : MonoBehaviour
         return Mathf.Sqrt(Mathf.Abs(a.X - b.X) + Mathf.Abs(a.Y - b.Y));
     }
 
-    private IEnumerable<BoardObjectValue> GetAllSameColorNeighbours(BoardObjectValue target)
+    private IEnumerable<BoardGem> GetAllSameColorNeighbours(BoardGem target)
     {
-        var horizontalResult = new List<BoardObjectValue>();
+        var horizontalResult = new List<BoardGem>();
 
         for (int i = target.Position.X - 1; i >= 0 ; i--)
         {
             var temp = this.gemsField[i, target.Position.Y];
-            if (temp == null || temp.Value != target.Value)
+            if (temp == null || temp.Color != target.Color)
             {
                 break;
             }
@@ -243,7 +263,7 @@ public class BoardController : MonoBehaviour
         for (int i = target.Position.X + 1; i < this.Columns; i++)
         {
             var temp = this.gemsField[i, target.Position.Y];
-            if (temp == null || temp.Value != target.Value)
+            if (temp == null || temp.Color != target.Color)
             {
                 break;
             }
@@ -251,12 +271,12 @@ public class BoardController : MonoBehaviour
             horizontalResult.Add(temp);
         }
 
-        var verticalResult = new List<BoardObjectValue>();
+        var verticalResult = new List<BoardGem>();
 
         for (int i = target.Position.Y + 1; i < this.Rows; i++)
         {
             var temp = this.gemsField[target.Position.X, i];
-            if (temp == null || temp.Value != target.Value)
+            if (temp == null || temp.Color != target.Color)
             {
                 break;
             }
@@ -267,7 +287,7 @@ public class BoardController : MonoBehaviour
         for (int i = target.Position.Y - 1; i >= 0 ; i--)
         {
             var temp = this.gemsField[target.Position.X, i];
-            if (temp == null || temp.Value != target.Value)
+            if (temp == null || temp.Color != target.Color)
             {
                 break;
             }
@@ -286,12 +306,45 @@ public class BoardController : MonoBehaviour
         }
 
         horizontalResult.AddRange(verticalResult);
-        List<BoardObjectValue> result = horizontalResult;
+        List<BoardGem> result = horizontalResult;
         if (result.Any())
         {
             result.Add(target);
         }
 
         return result;
+    }
+
+    private BoardGem FindNearestGemInColumns(Point position)
+    {
+        //if (position.Y == this.Rows - 1)
+        //{
+        //    return null;
+        //}
+
+        for (int i = position.Y + 1; i < this.Rows; i++)
+        {
+            var currentGem = this.gemsField[position.X, i];
+            if (currentGem != null)
+            {
+                return currentGem;
+            }
+        }
+
+        return null;
+    }
+
+    private void SwapPosition(BoardGem a, BoardGem b)
+    {
+        var aPosition = a.Position;
+        var bPosition = b.Position;
+        this.gemsField[aPosition.X, aPosition.Y] = b;
+        b.Position = aPosition;
+        this.gemsField[bPosition.X, bPosition.Y] = a;
+        a.Position = bPosition;
+
+        var tempPosition = b.GameObject.transform.position;
+        b.GameObject.transform.position = a.GameObject.transform.position;
+        a.GameObject.transform.position = tempPosition;
     }
 }
