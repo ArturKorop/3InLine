@@ -7,7 +7,7 @@ public struct Point
     public int Y;
 }
 
-public class GameObjectValue
+public class BoardObjectValue
 {
     public GameObject Object;
     public int Value;
