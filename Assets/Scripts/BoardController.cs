@@ -3,14 +3,17 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using UnityEngine.UI;
 
 public class BoardController : MonoBehaviour
 {
     public List<GameObject> Gems;
+    public Text ScoreText;
     public static BoardController Instance = null;
 
     public int Columns = 8;
     public int Rows = 8;
+    public int GemPrice;
 
     private Transform boardHolder;
     private BoardGem[,] gemsField;
@@ -18,6 +21,7 @@ public class BoardController : MonoBehaviour
     private BoardGem currentPressed;
     private List<int> GemIndexes;
     private bool canProcess;
+    private int score;
 
     public void Awake()
     {
@@ -40,22 +44,26 @@ public class BoardController : MonoBehaviour
         }
 
         this.canProcess = true;
+        this.score = 0;
         this.BoardSetup();
     }
 
     public void GemPressed(GameObject gem)
     {
-        for (int i = 0; i < this.Columns; i++)
+        if (this.canProcess)
         {
-            for (int j = 0; j < this.Rows; j++)
+            for (int i = 0; i < this.Columns; i++)
             {
-                var obj = this.gemsField[i,j];
-                if(gem == obj.GameObject)
+                for (int j = 0; j < this.Rows; j++)
                 {
-                    this.previousPressed = this.currentPressed;
-                    this.currentPressed = obj;
+                    var obj = this.gemsField[i, j];
+                    if (gem == obj.GameObject)
+                    {
+                        this.previousPressed = this.currentPressed;
+                        this.currentPressed = obj;
 
-                    break;
+                        break;
+                    }
                 }
             }
         }
@@ -78,6 +86,11 @@ public class BoardController : MonoBehaviour
         }
     }
 
+    public void Exit()
+    {
+        Application.Quit();
+    }
+
     private bool CheckGemStatus(BoardGem gem)
     {
         var neighbours = this.GetAllSameColorNeighbours(gem).ToArray(); ;
@@ -88,6 +101,8 @@ public class BoardController : MonoBehaviour
             this.gemsField[removingGem.Position.X, removingGem.Position.Y] = null;
             Destroy(removingGem.GameObject);
         }
+
+        this.UpdateScore(neighboursCount * this.GemPrice * (int)(neighboursCount/2));
 
         return neighboursCount > 0;
     }
@@ -140,7 +155,7 @@ public class BoardController : MonoBehaviour
                         this.gemsField[i, j] = nearestGem;
                         movedGems.Add(nearestGem);
 
-                        yield return new WaitForSeconds(0.2f);
+                        yield return new WaitForEndOfFrame();
                     }
                 }
             }
@@ -190,7 +205,7 @@ public class BoardController : MonoBehaviour
                         instance.transform.SetParent(this.boardHolder);
                         field.GameObject = instance;
 
-                        yield return new WaitForSeconds(0.2f);
+                        yield return new WaitForEndOfFrame();
                     }
                     else
                     {
@@ -317,11 +332,6 @@ public class BoardController : MonoBehaviour
 
     private BoardGem FindNearestGemInColumns(Point position)
     {
-        //if (position.Y == this.Rows - 1)
-        //{
-        //    return null;
-        //}
-
         for (int i = position.Y + 1; i < this.Rows; i++)
         {
             var currentGem = this.gemsField[position.X, i];
@@ -346,5 +356,11 @@ public class BoardController : MonoBehaviour
         var tempPosition = b.GameObject.transform.position;
         b.GameObject.transform.position = a.GameObject.transform.position;
         a.GameObject.transform.position = tempPosition;
+    }
+
+    private void UpdateScore(int addValue)
+    {
+        this.score += addValue;
+        this.ScoreText.text = "Score: " + this.score;
     }
 }
